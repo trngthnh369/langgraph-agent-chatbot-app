@@ -9,5 +9,4 @@ pydantic>=2.0.0
 openai-agents
 pandas
 flask
-chromadb
 google
