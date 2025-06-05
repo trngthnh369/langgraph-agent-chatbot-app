@@ -4,3 +4,10 @@ chromadb
 openai
 flask_cors
 langchain_openai
+openai>=1.12.0
+pydantic>=2.0.0
+openai-agents
+pandas
+flask
+chromadb
+google
