@@ -1,36 +1,23 @@
-
 # LangGraph Multi-Agent Sales Chatbot
 
-## Overview
-
-This project is an AI-powered **multi-agent chatbot** built for **e-commerce sales support**. It leverages **LangChain's LangGraph framework** to orchestrate multiple specialized agents, each handling a particular task. For example, one agent might handle product information queries while another handles store details. This multi-agent approach distributes responsibility among agents for better task specialization and efficiency.
-
-The chatbot uses a dataset of products and store information to answer questions like product availability, pricing, and store hours. By routing user queries through a **LangGraph StateGraph**, the system maintains conversation context and ensures coherent multi-turn dialogue.
+This project is an AI-powered **multi-agent chatbot** built for e-commerce sales support. It leverages LangChain’s **LangGraph** framework to orchestrate multiple specialized agents, each handling a particular task. For example, one agent might handle product information queries while another handles store details. This multi-agent approach distributes responsibility among agents for better _task specialization_ and efficiency. The chatbot uses a dataset of products and store information to answer questions like product availability, pricing, and store hours. By routing user queries through a LangGraph _StateGraph_, the system maintains conversation context and ensures coherent multi-turn dialogue.
 
 ## Key Features
-
-- **Product Inquiries**: Answers questions about product availability, pricing, and stock levels. For example, it can respond to queries like "What products are in stock?" or "How much does product X cost?"  
-- **Store Information**: Provides details about the store (e.g. location, opening hours, contact info) based on the provided data.  
-- **Stateful Conversation**: Keeps track of the dialogue context across turns, so the bot can handle follow-up questions naturally. LangGraph inherently maintains state and memory, ensuring agents work coherently.  
-- **Multi-Agent Workflow**: Internally uses multiple agents defined in a LangGraph StateGraph. A supervising chatbot node routes inputs to the right specialized agent (e.g. product-agent or store-agent) based on the query content. This allows each agent to focus on its domain.  
-- **Extensible Architecture**: New agents or tools (such as recommendation or order agents) can be added by defining additional nodes in the LangGraph flow. This modular design scales easily and follows LangGraph's flexible multi-agent control flow model.
+- **Product Inquiries:** Answers questions about product availability, pricing, and stock levels. For example, it can respond to queries like “What products are in stock?” or “How much does product X cost?”.  
+- **Store Information:** Provides details about the store (e.g., location, opening hours, contact info) based on the provided data.  
+- **Stateful Conversation:** Keeps track of dialogue context across turns, so the bot can handle follow-up questions naturally. LangGraph inherently maintains state and memory, ensuring agents work coherently.  
+- **Multi-Agent Workflow:** Internally uses multiple agents defined in a LangGraph _StateGraph_. A supervising chatbot node routes inputs to the right specialized agent (e.g., product-agent or store-agent) based on the query content. This allows each agent to focus on its domain.  
+- **Extensible Architecture:** New agents or tools (such as recommendation or order agents) can be added by defining additional nodes in the LangGraph flow. This modular design scales easily and follows LangGraph’s flexible multi-agent control flow model.
 
 ## Technologies Used
-
-- **Python 3**: The chatbot is implemented in Python.  
-- **LangChain & LangGraph**: Core frameworks for building the agent workflow. LangGraph provides a "sophisticated, stateful agent workflow" that simplifies multi-agent orchestration. It allows defining multiple AI agents with specialized responsibilities and routing logic.  
-- **LLM (Language Model)**: An LLM (such as OpenAI's GPT-4 or similar) powers the natural language understanding and generation. The agents use prompt templates and chain-of-thought to process user input.  
-- **Data Storage**: The project uses a simple data source (e.g. JSON or lightweight database) containing product and store details. The chatbot queries this data to answer user questions.  
-- **dotenv**: For managing environment variables (like API keys) securely.
+- **Python:** The chatbot is implemented in Python 3.  
+- **LangChain & LangGraph:** Core frameworks for building the agent workflow. LangGraph provides a sophisticated, stateful agent workflow that simplifies multi-agent orchestration. It allows defining multiple AI agents with specialized responsibilities and routing logic.  
+- **LLM (Language Model):** An LLM (such as OpenAI’s GPT-4 or similar) powers the natural language understanding and generation. The agents use prompt templates and chain-of-thought to process user input.  
+- **Data Storage:** The project uses a simple data source (e.g., JSON or a lightweight database) containing product and store details. The chatbot queries this data to answer user questions.  
+- **dotenv:** For managing environment variables (like API keys) securely.
 
 ## Architecture (Multi-Agent Flow)
-
-The chatbot's logic is defined as a **LangGraph StateGraph**. When a user sends a message, the main chatbot agent (the graph's entry node) evaluates the intent and routes the query to the appropriate sub-agent. For example:
-
-- If the user asks about a product, the query goes to the **Product Information Agent**.
-- If the question is about store hours, it goes to the **Store Info Agent**.
-
-Each agent processes the input (often calling the LLM with a structured prompt) and updates the conversation state. Because LangGraph maintains state across nodes, the context (previous messages, gathered information) is preserved. This supervisor-worker pattern and stateful design take advantage of multi-agent benefits: specialized expertise per agent and maintainable stateful context.
+The chatbot’s logic is defined as a **LangGraph StateGraph**. When a user sends a message, the main chatbot agent (the graph’s entry node) evaluates the intent and routes the query to the appropriate sub-agent. For example, if the user asks about a product, the query goes to the _Product Information Agent_; if the question is about store hours, it goes to the _Store Info Agent_. Each agent processes the input (often calling the LLM with a structured prompt) and updates the conversation state. Because LangGraph maintains state across nodes, the context (previous messages, gathered information) is preserved. This supervisor-worker pattern and stateful design take advantage of multi-agent benefits: specialized expertise per agent and maintainable stateful context.
 
 ## Installation and Running Locally
 
