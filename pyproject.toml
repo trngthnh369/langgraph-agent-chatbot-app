@@ -1,0 +1,57 @@
+[project]
+name = "langgraph-agent-chatbot-sales"
+version = "1.0.0"
+description = "Advanced Multi-Agent Chatbot for E-commerce Sales using LangGraph and Gemini API"
+authors = [
+    {name = "Thinh Nguyen Truong", email = "truongthinhnguyen30303@gmail.com"},
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+
+dependencies = [
+    "langgraph>=0.2.0",
+    "python-dotenv==1.0.1",
+    "chromadb>=0.4.0",
+    "google-generativeai>=0.3.0",
+    "flask>=2.3.0",
+    "flask-cors>=4.0.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "requests>=2.31.0",
+    "streamlit>=1.28.0",
+    "streamlit-chat>=0.1.1",
+    "plotly>=5.15.0",
+    "altair>=5.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

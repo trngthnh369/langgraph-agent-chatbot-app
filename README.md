@@ -1,133 +1,311 @@
-# LangGraph Multi-Agent Sales Chatbot
+# 🤖 Advanced Multi-Agent E-commerce Chatbot
 
-This project is an AI-powered **multi-agent chatbot** built for e-commerce sales support. It leverages LangChain’s **LangGraph** framework to orchestrate multiple specialized agents, each handling a particular task. For example, one agent might handle product information queries while another handles store details. This multi-agent approach distributes responsibility among agents for better *task specialization* and efficiency. The chatbot uses a dataset of products and store information to answer questions like product availability, pricing, and store hours.
+A sophisticated sales chatbot built with **LangGraph**, **Google Gemini AI**, and **ChromaDB** that provides intelligent customer support for e-commerce businesses.
 
-By routing user queries through a LangGraph *StateGraph*, the system maintains conversation context and ensures coherent multi-turn dialogue.
+## 🚀 Features
 
----
+### 🎯 Multi-Agent Architecture
+- **Manager Agent**: Routes queries and orchestrates workflow
+- **Product Agent**: Handles product-related inquiries with RAG
+- **Shop Information Agent**: Manages store information and services
+- **Query Rewriter**: Optimizes queries for better results
+- **Context Evaluator**: Determines information needs
+- **Response Evaluator**: Ensures quality responses
 
-## ✨ Features
+### 🔄 Intelligent Workflow
+1. **Query Processing**: Language detection and query optimization
+2. **Context Assessment**: Determines if additional information is needed
+3. **Source Selection**: Chooses appropriate data sources
+4. **Information Retrieval**: RAG from vector database + internet search
+5. **Response Generation**: AI-powered responses with context
+6. **Quality Assurance**: Automated response evaluation with retry logic
 
-- **Product Inquiries:** Answers questions about product availability, pricing, and stock levels.
-- **Store Information:** Provides store details such as address, hours, and contact info.
-- **Stateful Conversation:** Maintains context across multiple user turns for natural interactions.
-- **Multi-Agent Workflow:** Uses LangGraph to define and manage specialized agents for different domains (product info, store info, etc.).
-- **Extensible Architecture:** Easy to add new agents or data sources.
+### 🛠 Technical Capabilities
+- **Vector Search**: ChromaDB with Gemini embeddings
+- **Internet Search**: SerpAPI integration for real-time information
+- **Multilingual Support**: Vietnamese and English
+- **Retry Logic**: Automatic query rewriting for better results
+- **Context-Aware**: Maintains conversation history
 
----
+## 📋 Prerequisites
 
-## 🧰 Technologies Used
+- **Python 3.9+**
+- **UV package manager** (recommended) or pip
+- **Google AI API Key** (Gemini)
+- **SerpAPI Key** (optional, for internet search)
 
-- **Python 3**
-- **[LangChain](https://www.langchain.com/)** & **[LangGraph](https://docs.langchain.com/langgraph/)** for multi-agent orchestration
-- **OpenAI or compatible LLM API** for natural language processing
-- **dotenv** for environment variable management
-- **Simple JSON-based or local data source** for product/store information
+## 🛠 Installation
 
----
-
-## ⚙️ Architecture Overview
-
-The chatbot is powered by a **LangGraph StateGraph**:
-
-1. **Chatbot node** receives user input and determines intent.
-2. Based on the intent, the message is routed to the appropriate **sub-agent**:
-   - *ProductAgent* handles product-related questions.
-   - *StoreAgent* handles store-related queries.
-3. Each agent uses prompt templates and LLM calls to process requests.
-4. LangGraph handles state transitions and memory, ensuring agents can work together across turns.
-
-This **multi-agent setup** allows each part of the system to specialize in a domain while working together seamlessly.
-
----
-
-## 🛠️ Installation & Local Setup
-
-Follow these steps to run the chatbot locally:
-
-### 1. Clone the Repository
+### Using UV (Recommended)
 
 ```bash
-git clone https://github.com/trngthnh369/langgraph-agent-chatbot-app.git
-cd langgraph-agent-chatbot-app
+# Install UV if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/trngthnh369/langgraph-agent-chatbot-sales.git
+cd langgraph-agent-chatbot-sales
+
+# Create virtual environment and install dependencies
+uv venv
+.venv\Scripts\activate
+uv pip install -e .
 ```
 
-### 2. Create a Python Virtual Environment (Recommended)
+### Using Pip
 
 ```bash
-python3 -m venv venv
+# Clone the repository
+git clone https://github.com/trngthnh369/langgraph-agent-chatbot-sales.git
+cd langgraph-agent-chatbot-sales
+
+# Create virtual environment
+python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
 
-### 3. Install Dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-This will install LangChain, LangGraph, and other required libraries.
+## ⚙️ Configuration
 
-### 4. Configure Environment Variables
-
+1. **Copy environment template**:
 ```bash
 cp .env.example .env
 ```
 
-Open the `.env` file and set your API keys. For example:
-
+2. **Configure your API keys in `.env`**:
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+SERPAPI_API_KEY=your_serpapi_key_here  # Optional
+DEBUG=false
+LOG_LEVEL=INFO
+CHROMA_DB_PATH=./db
 ```
-OPENAI_API_KEY=your_openai_api_key_here
-```
 
-Add any other keys needed by your configuration.
+3. **Get your API keys**:
+   - **Gemini API**: Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - **SerpAPI**: Get from [SerpAPI Dashboard](https://serpapi.com/dashboard) (optional)
 
-### 5. Run the Chatbot
+## 🗃 Database Setup
+
+### Prepare Your Product Data
+
+1. **Create your product CSV file** (`hoanghamobile.csv`) with columns:
+   - `title`: Product name
+   - `product_promotion`: Promotional information
+   - `product_specs`: Technical specifications
+   - `current_price`: Price information
+   - `color_options`: Available colors (JSON array format)
+
+### Build Vector Database
 
 ```bash
-python main.py
+#Using UV
+uv run build-vector-search.py
+# Using standard Python
+python build-vector-search.py
 ```
 
-This starts the chatbot (e.g. in an interactive CLI or a simple interface). You should see a prompt or greeting message. You can then type questions and the bot will respond.
+This will:
+- Process your product data
+- Generate embeddings using Gemini API
+- Create ChromaDB vector database
+- Test the database functionality
 
-**Example interaction:**
+## 🚀 Usage
+
+### Start the Chatbot
+
+```bash
+# Using UV
+uv run app.py
+
+# Using standard Python
+python app.py
+```
+
+### Deploy with Streamlit
+
+```bash
+streamlit run streamlit_app.py
+```
+
+### Example Interactions
 
 ```
-Bot: Hello! How can I assist you today?
-You: What is the price of product X?
-Bot: [Shows price and details from data]...
+You: Nokia 3210 4G có giá bao nhiêu?
+Assistant: Nokia 3210 4G có giá là 1,590,000 ₫. Đây là điện thoại feature phone với kết nối 4G, thiết kế cổ điển và pin lâu dài.
+
+You: Cửa hàng có ở đâu?
+Assistant: Chúng tôi có 3 cửa hàng tại Hà Nội:
+1. 89 Đ. Tam Trinh, Mai Động, Hoàng Mai - Mở cửa 8:30-21:30
+2. 27A Nguyễn Công Trứ, Phạm Đình Hổ, Hai Bà Trưng - Mở cửa 8:30-21:30
+3. 392 Đ. Trương Định, Tương Mai, Hoàng Mai - Mở cửa 8:30-21:30
+
+You: What's the best Samsung phone under $300?
+Assistant: Based on our current inventory, I'd recommend the Samsung Galaxy A05s...
 ```
 
-At this point the chatbot is running locally. It uses the supplied product/store data to answer queries, leveraging LangGraph's multi-agent workflow to determine how to handle each question.
+## 🏗 Architecture
 
-## Data and Extensibility
+### Workflow Diagram
 
-The project includes sample data files:
+```
+Start → Language Detection → Query Rewriting → Agent Routing
+                                                     ↓
+Context Assessment → Source Selection → Information Retrieval
+                                                     ↓
+Response Generation → Quality Evaluation → Final Response
+                              ↓
+                    (If poor quality: retry with rewritten query)
+```
 
-- `data/products.json`
-- `data/store.json`
+### Agent Responsibilities
 
-To update or expand the bot’s knowledge, you can:
+| Agent | Responsibility | Data Sources |
+|-------|---------------|--------------|
+| **Manager** | Query routing and orchestration | N/A |
+| **Query Rewriter** | Query optimization and refinement | N/A |
+| **Context Evaluator** | Determines information requirements | N/A |
+| **Source Selector** | Chooses appropriate data sources | N/A |
+| **Product Agent** | Product inquiries and recommendations | ChromaDB + Internet |
+| **Shop Agent** | Store information and services | Local DB + Internet |
+| **Response Evaluator** | Quality assurance and retry logic | N/A |
 
-- Edit these data files
-- Connect a real database
-- Add a new agent (e.g., an order placement agent) by defining a new node in the LangGraph and writing its logic
+## 📁 Project Structure
 
-LangGraph’s framework makes this straightforward.
+```
+langgraph-agent-chatbot-sales/
+├── app.py                     # Main application with LangGraph workflow
+├── rag.py                     # RAG implementation with Gemini + SerpAPI
+├── prompt.py                  # Agent instructions and prompts
+├── streamlit_app.py           # Deploy with Streamlit
+├── build-vector-search.py     # Vector database builder
+├── hoanghamobile.csv          # Product data (you provide this)
+├── db/                        # ChromaDB storage (auto-created)
+├── pyproject.toml             # UV project configuration
+├── requirements.txt           # Python dependencies
+├── .env.example               # Environment variables template
+└── README.md                  # This file
+```
 
-## Summary
+## 🎛 Configuration Options
 
-This chatbot demonstrates how LangGraph can manage a multi-agent conversation flow for sales support. By using LangGraph’s structured workflow, it cleanly separates concerns among agents (e.g., product queries vs. store info) while maintaining a coherent dialogue.
+### Agent Behavior
 
-The setup above allows anyone to clone the repo, install the requirements, configure API keys, and run the chatbot locally to start interacting with it.
+Customize agent behavior by modifying `prompt.py`:
+- **Response styles**: Formal vs casual
+- **Language preferences**: Default language handling
+- **Routing logic**: Query classification rules
+- **Quality criteria**: Response evaluation standards
 
-## References
+### Database Settings
 
-- [A Step-by-Step Guide on how to build a Multi-Agent Chatbot](https://techifysolutions.com/blog/building-a-multi-agent-chatbot-with-langgraph/)
-- [LangGraph](https://www.langchain.com/langgraph)
-- [GitHub - lucasboscatti/sales-ai-agent-langgraph](https://github.com/lucasboscatti/sales-ai-agent-langgraph)
+Configure database behavior in `rag.py`:
+- **Similarity threshold**: Minimum similarity for relevant results
+- **Number of results**: How many documents to retrieve
+- **Embedding model**: Gemini embedding model selection
+- **Retry logic**: Fallback behavior for failed searches
 
----
+## 🔧 Troubleshooting
 
-## Contact
+### Common Issues
 
-For questions or support, please contact: **truongthinhnguyen30303@gmail.com**
+**1. "No module named 'google.generativeai'"**
+```bash
+uv pip install google-generativeai
+# or
+pip install google-generativeai
+```
+
+**2. "ChromaDB collection not found"**
+```bash
+Rebuld the vector database
+uv build-vector-search.py
+```
+
+**3. "API key not configured"**
+- Check your `.env` file
+- Ensure `GEMINI_API_KEY` is set correctly
+- Verify API key validity at Google AI Studio
+
+**4. "Internet search not working"**
+- SerpAPI is optional
+- Check `SERPAPI_API_KEY` in `.env`
+- The system will work without internet search
+
+### Debug Mode
+
+Enable debug logging:
+```bash
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+uv run app.py
+```
+### Docker Deployment (Optional)
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY . .
+
+RUN pip install uv
+RUN uv pip install -e .
+
+CMD ["python", "app.py"]
+```
+
+## 🔄 Development
+
+### Adding New Agents
+
+1. **Create agent function** in `app.py`
+2. **Add routing logic** in manager agent
+3. **Update prompts** in `prompt.py`
+4. **Add to StateGraph** workflow
+5. **Test thoroughly**
+
+### Extending Data Sources
+
+1. **Add new RAG function** in `rag.py`
+2. **Update source selection** logic
+3. **Modify agent instructions**
+4. **Update error handling**
+
+## 📊 Performance
+
+### Benchmarks
+
+- **Average response time**: 2-5 seconds
+- **Query processing**: ~1 second
+- **Vector search**: ~200ms
+- **Internet search**: 1-3 seconds (when used)
+- **Concurrent users**: Scales with API limits
+
+### Optimization Tips
+
+- **Cache frequent queries**
+- **Batch process embeddings**
+- **Use connection pooling**
+- **Implement response caching**
+- **Monitor API rate limits**
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **LangGraph** for the multi-agent framework
+- **Google Gemini** for advanced AI capabilities
+- **ChromaDB** for efficient vector storage
+- **SerpAPI** for internet search functionality
+- **ProtonX** for the educational foundation
+
+## 🆘 Support
+
+Need help? 
+
+- 📧 **Email**: truongthinhnguyen30303@gmail.com

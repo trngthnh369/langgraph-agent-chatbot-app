@@ -1,221 +1,420 @@
 from typing import TypedDict, List, Dict, Any, Optional, Literal
 from langgraph.graph import StateGraph, START, END
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from utils import print_welcome_banner
+import google.generativeai as genai
 from dotenv import load_dotenv
+import os
+
 load_dotenv()
 
 # Import your existing RAG tools and prompts
-from rag import rag, shop_information_rag
-from prompt import MANAGER_INSTRUCTION, PRODUCT_INSTRUCTION, SHOP_INFORMATION_INSTRUCTION
+from rag import rag, shop_information_rag, search_internet
+from prompt import (
+    MANAGER_INSTRUCTION, 
+    PRODUCT_INSTRUCTION, 
+    SHOP_INFORMATION_INSTRUCTION,
+    QUERY_REWRITER_INSTRUCTION,
+    CONTEXT_EVALUATOR_INSTRUCTION,
+    SOURCE_SELECTOR_INSTRUCTION,
+    RESPONSE_EVALUATOR_INSTRUCTION
+)
 
-# Initialize our LLM
-model = ChatOpenAI(temperature=0)
+# Configure Gemini API
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Define our State
 class AgentState(TypedDict):
-    # The query being processed
-    query: str
+    # The original and processed queries
+    original_query: str
+    rewritten_query: str
+    current_query: str
     language: str
+    
+    # Loop control
+    max_iterations: int
+    current_iteration: int
+    
     # The conversation history
     messages: List[Dict[str, Any]]
-    # Agent routing
+    
+    # Agent routing and decisions
     routing_decision: Optional[str]
-    # RAG results
+    needs_additional_info: bool
+    selected_sources: List[str]
+    
+    # RAG and search results
     product_rag_results: Optional[str]
     shop_info_rag_results: Optional[str]
-    # Final response
+    internet_search_results: Optional[str]
+    retrieved_context: Optional[str]
+    
+    # Response evaluation
     response: Optional[str]
+    response_quality_good: bool
+    
+    # Final response
+    final_response: Optional[str]
 
-# Define our Nodes (processing functions)
-def process_query(state: AgentState):
-    """Initial processing of the query"""
-    print(f"\n[System] Processing query: {state['query']}")
+def detect_language(state: AgentState):
+    """Detect the language of the user's query"""
+    query = state["original_query"]
+    print(f"\n[System] Detecting language for: {query}")
 
-    language_detect_prompt = f"""
-    Return the language of the user's query: {state['query']}
-    Respond with just one word like en, vi,
+    prompt = f"""
+    Detect the language of this query and respond with just the language code:
+    Query: {query}
+    
+    Respond with only: 'vi' for Vietnamese, 'en' for English, or the appropriate language code.
     """
-
-    messages_for_llm = [HumanMessage(content=language_detect_prompt)]
-    response = model.invoke(messages_for_llm)
-
+    
+    response = model.generate_content(prompt)
+    language = response.text.strip().lower()
+    
+    print(f"[System] Detected language: {language}")
+    
     return {
-        "language": response.content.strip()
+        "language": language,
+        "current_query": query,
+        "current_iteration": 0,
+        "max_iterations": 3
     }
 
-def determine_agent(state: AgentState):
-    """Manager agent determines which specialized agent should handle the query"""
-    query = state["query"]
-    messages = state["messages"]
+def rewrite_query(state: AgentState):
+    """Agent that rewrites the query for better processing"""
+    current_query = state["current_query"]
+    language = state["language"]
     
-    # Prepare prompt for the LLM
+    print(f"[System] Rewriting query (Iteration {state['current_iteration'] + 1})")
+    
     prompt = f"""
+    {QUERY_REWRITER_INSTRUCTION}
+    
+    Original query: {current_query}
+    Language: {language}
+    
+    Rewrite this query to be more specific and searchable while maintaining the original intent.
+    """
+    
+    response = model.generate_content(prompt)
+    rewritten_query = response.text.strip()
+    
+    print(f"[System] Rewritten query: {rewritten_query}")
+    
+    return {
+        "rewritten_query": rewritten_query,
+        "current_query": rewritten_query,
+        "current_iteration": state["current_iteration"] + 1
+    }
+
+def determine_agent_and_context_need(state: AgentState):
+    """Manager agent determines routing and if additional context is needed"""
+    query = state["current_query"]
+    
+    print(f"[System] Determining routing and context needs")
+    
+    # First determine routing
+    routing_prompt = f"""
     {MANAGER_INSTRUCTION}
     
     User query: {query}
     
-    Based on this query, determine if it should be handled by:
+    Determine if this should be handled by:
     1. "product" - for product related queries
     2. "shop_information" - for store information, hours, location, etc.
     
-    Respond with just one word: either "product" or "shop_information".
+    Respond with just: "product" or "shop_information"
     """
     
-    # Call the LLM
-    messages_for_llm = [HumanMessage(content=prompt)]
-    response = model.invoke(messages_for_llm)
+    routing_response = model.generate_content(routing_prompt)
+    routing_decision = routing_response.text.strip().lower()
     
-    # Parse the response to get routing decision
-    response_text = response.content.lower().strip()
-    routing_decision = None
+    # Then determine if additional context is needed
+    context_prompt = f"""
+    {CONTEXT_EVALUATOR_INSTRUCTION}
     
-    if "product" in response_text:
-        routing_decision = "product"
-    elif "shop_information" in response_text:
-        routing_decision = "shop_information"
+    Query: {query}
+    Agent type: {routing_decision}
+    
+    Does this query need additional information beyond basic knowledge?
+    Consider if the query is:
+    - Very specific about product details
+    - About current prices or availability
+    - About store locations or hours
+    - About recent information
+    
+    Respond with just: "yes" or "no"
+    """
+    
+    context_response = model.generate_content(context_prompt)
+    needs_additional_info = context_response.text.strip().lower() == "yes"
+    
+    print(f"[System] Routing: {routing_decision}, Needs additional info: {needs_additional_info}")
+    
+    return {
+        "routing_decision": routing_decision,
+        "needs_additional_info": needs_additional_info
+    }
+
+def select_information_sources(state: AgentState):
+    """Agent that selects which sources to use for additional information"""
+    query = state["current_query"]
+    routing_decision = state["routing_decision"]
+    
+    print(f"[System] Selecting information sources")
+    
+    prompt = f"""
+    {SOURCE_SELECTOR_INSTRUCTION}
+    
+    Query: {query}
+    Agent type: {routing_decision}
+    
+    Which information sources should be used? Select from:
+    1. "vector_database" - for product information
+    2. "shop_database" - for shop information
+    3. "internet_search" - for current information or when other sources might not have the answer
+    
+    You can select multiple sources. Respond with a comma-separated list like: "vector_database,internet_search"
+    """
+    
+    response = model.generate_content(prompt)
+    selected_sources = [source.strip() for source in response.text.strip().split(",")]
+    
+    print(f"[System] Selected sources: {selected_sources}")
+    
+    return {
+        "selected_sources": selected_sources
+    }
+
+def retrieve_context(state: AgentState):
+    """Retrieve context from selected sources"""
+    query = state["current_query"]
+    selected_sources = state["selected_sources"]
+    
+    print(f"[System] Retrieving context from sources: {selected_sources}")
+    
+    retrieved_context = ""
+    
+    # Retrieve from vector database (products)
+    if "vector_database" in selected_sources:
+        try:
+            product_rag_results = rag(query)
+            retrieved_context += f"Product Information:\n{product_rag_results}\n\n"
+            print(f"[System] Retrieved product information")
+        except Exception as e:
+            print(f"[System] Error retrieving product info: {e}")
+    
+    # Retrieve from shop database
+    if "shop_database" in selected_sources:
+        try:
+            shop_info_rag_results = shop_information_rag()
+            shop_info_text = "\n".join([
+                f"Address: {shop['address']}, Hours: {shop['opening_hours']}, Maps: {shop['maps_url']}"
+                for shop in shop_info_rag_results
+            ])
+            retrieved_context += f"Shop Information:\n{shop_info_text}\n\n"
+            print(f"[System] Retrieved shop information")
+        except Exception as e:
+            print(f"[System] Error retrieving shop info: {e}")
+    
+    # Retrieve from internet search
+    if "internet_search" in selected_sources:
+        try:
+            internet_search_results = search_internet(query)
+            retrieved_context += f"Internet Search Results:\n{internet_search_results}\n\n"
+            print(f"[System] Retrieved internet search results")
+        except Exception as e:
+            print(f"[System] Error with internet search: {e}")
+    
+    return {
+        "retrieved_context": retrieved_context
+    }
+
+def generate_response(state: AgentState):
+    """Generate response based on routing decision and available context"""
+    query = state["current_query"]
+    routing_decision = state["routing_decision"]
+    language = state["language"]
+    retrieved_context = state.get("retrieved_context", "")
+    
+    print(f"[System] Generating response with {routing_decision} agent")
+    
+    if routing_decision == "product":
+        instruction = PRODUCT_INSTRUCTION
     else:
-        routing_decision = "no_answer"
+        instruction = SHOP_INFORMATION_INSTRUCTION
     
-    print(f"[System] Routing decision: {routing_decision}")
-    
-    # Return state updates
-    return {
-        "routing_decision": routing_decision
-    }
-
-def handle_product_query(state: AgentState):
-    """Product agent handles product-related queries using RAG"""
-    query = state["query"]
-    messages = state["messages"]
-    language = state["language"]
-    
-    # Use your existing RAG function
-    rag_results = rag(query)
-    print(f"[System] Retrieved product information")
-    
-    # Prepare prompt for the LLM with RAG context
     prompt = f"""
-    {PRODUCT_INSTRUCTION}
+    {instruction}
     
     User query: {query}
+    Language: {language}
     
-    RAG results: {rag_results}
+    {'Retrieved Context: ' + retrieved_context if retrieved_context else 'No additional context available.'}
     
-    Based on the provided information, answer the user's product-related question.
-    The answer must be in {language}
+    Provide a helpful and accurate response in {language}.
     """
     
-    # Call the LLM
-    messages_for_llm = [HumanMessage(content=prompt)]
-    response = model.invoke(messages_for_llm)
+    response = model.generate_content(prompt)
+    generated_response = response.text.strip()
     
-    # Return state updates
+    print(f"[System] Generated response")
+    
     return {
-        "product_rag_results": rag_results,
-        "response": response.content
+        "response": generated_response
     }
 
-def handle_shop_information_query(state: AgentState):
-    """Shop information agent handles store-related queries using RAG"""
-    query = state["query"]
-    messages = state["messages"]
+def evaluate_response(state: AgentState):
+    """Evaluate if the response adequately answers the query"""
+    query = state["current_query"]
+    response = state["response"]
     language = state["language"]
-
-    # Use your existing RAG function
-    rag_results = shop_information_rag()
-    print(f"[System] Retrieved shop information")
     
-    # Prepare prompt for the LLM with RAG context
+    print(f"[System] Evaluating response quality")
+    
     prompt = f"""
-    {SHOP_INFORMATION_INSTRUCTION}
+    {RESPONSE_EVALUATOR_INSTRUCTION}
+    
+    Original query: {query}
+    Generated response: {response}
+    Language: {language}
+    
+    Does this response adequately answer the user's question? 
+    Consider:
+    - Does it directly address what was asked?
+    - Is it specific enough?
+    - Is it in the correct language?
+    - Does it provide useful information?
+    
+    Respond with just: "yes" or "no"
+    """
+    
+    evaluation_response = model.generate_content(prompt)
+    response_quality_good = evaluation_response.text.strip().lower() == "yes"
+    
+    print(f"[System] Response quality good: {response_quality_good}")
+    
+    return {
+        "response_quality_good": response_quality_good
+    }
+
+def finalize_response(state: AgentState):
+    """Finalize the response"""
+    print(f"[System] Finalizing response")
+    
+    return {
+        "final_response": state["response"]
+    }
+
+def handle_no_context_response(state: AgentState):
+    """Handle direct response without additional context"""
+    query = state["current_query"]
+    routing_decision = state["routing_decision"]
+    language = state["language"]
+    
+    print(f"[System] Generating direct response without additional context")
+    
+    if routing_decision == "product":
+        instruction = PRODUCT_INSTRUCTION
+    else:
+        instruction = SHOP_INFORMATION_INSTRUCTION
+    
+    prompt = f"""
+    {instruction}
     
     User query: {query}
+    Language: {language}
     
-    RAG results: {rag_results}
-    
-    Based on the provided information, answer the user's question about the shop.
-    The answer must be in {language}
+    Provide a helpful response based on general knowledge. Answer in {language}.
     """
     
-    # Call the LLM
-    messages_for_llm = [HumanMessage(content=prompt)]
-    response = model.invoke(messages_for_llm)
+    response = model.generate_content(prompt)
+    generated_response = response.text.strip()
     
-    # Return state updates
     return {
-        "shop_info_rag_results": rag_results,
-        "response": response.content
+        "response": generated_response
     }
 
-def format_response(state: AgentState):
-    """Format the final response to return to the user"""
-    # In this simple case, we just return the response directly
-    # You could add additional formatting here if needed
-    print(f"[System] Preparing response")
-    return {}
+# Routing functions
+def route_context_need(state: AgentState) -> str:
+    """Route based on whether additional context is needed"""
+    if state["needs_additional_info"]:
+        return "select_sources"
+    else:
+        return "generate_direct"
 
-# Define routing logic
-def route_query(state: AgentState) -> str:
-    """Determine which agent should handle the query"""
-    if state["routing_decision"] == "product":
+def route_response_evaluation(state: AgentState) -> str:
+    """Route based on response quality and iteration count"""
+    if state["response_quality_good"]:
+        return "finalize"
+    elif state["current_iteration"] >= state["max_iterations"]:
+        return "finalize"  # Stop after max iterations
+    else:
+        return "retry"
+
+def route_agent_type(state: AgentState) -> str:
+    """Route to appropriate agent based on routing decision"""
+    routing_decision = state.get("routing_decision", "").lower()
+    if "product" in routing_decision:
         return "product"
-    elif state["routing_decision"] == "shop_information":
+    elif "shop" in routing_decision:
         return "shop_information"
     else:
-        return "no_answer"
-    
-def no_answer(state: AgentState):
-    """No answer agent handles queries that are not related to products or shop information"""
-    language = state["language"]
-    if language == "vi":
-        return {
-            "response": f"Tôi xin lỗi, tôi không biết trả lời câu hỏi của bạn."
-        }
-    else:
-        return {
-            "response": f"I'm sorry, I don't know how to answer that."
-        }
+        return "general"
 
 # Create the StateGraph
 agent_graph = StateGraph(AgentState)
 
 # Add nodes
-agent_graph.add_node("process_query", process_query)
-agent_graph.add_node("determine_agent", determine_agent)
-agent_graph.add_node("handle_product_query", handle_product_query)
-agent_graph.add_node("no_answer", no_answer)
-
-agent_graph.add_node("handle_shop_information_query", handle_shop_information_query)
-agent_graph.add_node("format_response", format_response)
+agent_graph.add_node("detect_language", detect_language)
+agent_graph.add_node("rewrite_query", rewrite_query)
+agent_graph.add_node("determine_agent_and_context_need", determine_agent_and_context_need)
+agent_graph.add_node("select_information_sources", select_information_sources)
+agent_graph.add_node("retrieve_context", retrieve_context)
+agent_graph.add_node("generate_response", generate_response)
+agent_graph.add_node("generate_direct_response", handle_no_context_response)
+agent_graph.add_node("evaluate_response", evaluate_response)
+agent_graph.add_node("finalize_response", finalize_response)
 
 # Define the flow
-agent_graph.add_edge(START, "process_query")
-agent_graph.add_edge("process_query", "determine_agent")
+agent_graph.add_edge(START, "detect_language")
+agent_graph.add_edge("detect_language", "rewrite_query")
+agent_graph.add_edge("rewrite_query", "determine_agent_and_context_need")
 
-# Add conditional branching from determine_agent
+# Add conditional branching for context need
 agent_graph.add_conditional_edges(
-    "determine_agent",
-    route_query,
+    "determine_agent_and_context_need",
+    route_context_need,
     {
-        "product": "handle_product_query",
-        "shop_information": "handle_shop_information_query",
-        "no_answer": "no_answer"
+        "select_sources": "select_information_sources",
+        "generate_direct": "generate_direct_response"
     }
 )
 
-# Add the final edges
-agent_graph.add_edge("handle_product_query", "format_response")
-agent_graph.add_edge("handle_shop_information_query", "format_response")
-agent_graph.add_edge("format_response", END)
-agent_graph.add_edge("no_answer", END)
+# Continue with context retrieval flow
+agent_graph.add_edge("select_information_sources", "retrieve_context")
+agent_graph.add_edge("retrieve_context", "generate_response")
+
+# Both paths lead to response evaluation
+agent_graph.add_edge("generate_response", "evaluate_response")
+agent_graph.add_edge("generate_direct_response", "evaluate_response")
+
+# Add conditional branching for response evaluation
+agent_graph.add_conditional_edges(
+    "evaluate_response",
+    route_response_evaluation,
+    {
+        "finalize": "finalize_response",
+        "retry": "rewrite_query"  # Go back to rewrite query
+    }
+)
+
+# Final edge
+agent_graph.add_edge("finalize_response", END)
 
 # Compile the graph
 compiled_graph = agent_graph.compile()
 
 def main():
-    print_welcome_banner()
     
     # Set up conversation history
     conversation_history = []
@@ -225,28 +424,45 @@ def main():
         user_input = input("\nYou: ")
         
         # Check if user wants to exit
-        if user_input.lower() in ["exit", "quit", "bye"]:
+        if user_input.lower() in ["exit", "quit", "bye", "thoat"]:
             print("Assistant: Goodbye! Have a great day!")
             break
         
         # Prepare the input state for the graph
         input_state = {
-            "query": user_input,
+            "original_query": user_input,
+            "rewritten_query": "",
+            "current_query": user_input,
+            "language": "en",
+            "max_iterations": 3,
+            "current_iteration": 0,
             "messages": conversation_history + [{"role": "user", "content": user_input}],
             "routing_decision": None,
+            "needs_additional_info": False,
+            "selected_sources": [],
             "product_rag_results": None,
             "shop_info_rag_results": None,
-            "response": None
+            "internet_search_results": None,
+            "retrieved_context": None,
+            "response": None,
+            "response_quality_good": False,
+            "final_response": None
         }
         
-        # Invoke the graph with the input state
-        result = compiled_graph.invoke(input_state)
-        
-        # Update conversation history
-        conversation_history = input_state["messages"] + [{"role": "assistant", "content": result["response"]}]
-        
-        # Display the assistant's response
-        print(f"\nAssistant: {result['response']}")
+        try:
+            # Invoke the graph with the input state
+            result = compiled_graph.invoke(input_state)
+            
+            # Update conversation history
+            final_response = result.get("final_response", "I'm sorry, I couldn't process your request.")
+            conversation_history = input_state["messages"] + [{"role": "assistant", "content": final_response}]
+            
+            # Display the assistant's response
+            print(f"\nAssistant: {final_response}")
+            
+        except Exception as e:
+            print(f"\nAssistant: I apologize, but I encountered an error: {str(e)}")
+            print("Please try again with a different question.")
 
 if __name__ == "__main__":
     main()
